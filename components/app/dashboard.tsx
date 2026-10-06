@@ -106,8 +106,18 @@ export function Dashboard() {
 }
 
 function GpaCard() {
-  const { gpa, realGpa, anyHypothetical } = useGradebook();
+  const { gpa, realGpa, cumulative, realCumulative, anyHypothetical, transcript } = useGradebook();
   const prefs = prefsStore.useValue();
+  const reading = prefs.gpaSource === "auto" && transcript.status === "LOADING";
+  const sourceText =
+    cumulative.source === "transcript" && transcript.status === "FOUND"
+      ? `Unofficial transcript (${fmtDate(transcript.transcript.document.date)})${cumulative.currentIncluded ? " + this term" : ""}`
+      : reading
+        ? "Reading your transcript…"
+        : cumulative.source === "manual"
+          ? "Past years you entered + this term"
+          : "This term only so far";
+
   return (
     <section
       aria-label="GPA"
@@ -117,46 +127,81 @@ function GpaCard() {
         aria-hidden
         className="pointer-events-none absolute -right-16 -top-24 size-64 rounded-full bg-gold-soft/25 blur-3xl"
       />
-      <div className="relative flex flex-wrap items-start justify-between gap-4">
+      <div className="relative flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
         <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] opacity-70">
-          Grade point average
+          Cumulative GPA
           {anyHypothetical && (
             <span className="inline-flex items-center gap-1 rounded-full bg-gold-soft px-2 py-0.5 text-[0.7rem] normal-case tracking-normal text-black">
               <Sparkles size={12} aria-hidden /> Hypothetical
             </span>
           )}
         </div>
-        <p className="text-xs opacity-70">
-          {gpa.count} {gpa.count === 1 ? "class" : "classes"} · AP +{prefs.bonus.ap.toFixed(1)} · Honors +{prefs.bonus.honors.toFixed(1)}
+        <p className="text-xs opacity-70" aria-live="polite">
+          {sourceText}
+          {cumulative.credits > 0 && cumulative.source !== "term" ? ` · ${fmtCredits(cumulative.credits)} credits` : ""}
         </p>
       </div>
-      <dl className="relative mt-4 grid grid-cols-2 gap-4">
-        <div>
-          <dt className="text-sm opacity-70">Weighted</dt>
+      {/* Many districts (Northshore included) only report an unweighted GPA; show one number then. */}
+      {cumulative.weighted === null ? (
+        <dl className="relative mt-4">
+          <dt className="text-sm opacity-70">Unweighted (4.0 scale)</dt>
           <dd className="mt-1 flex items-baseline gap-2">
-            <span className="text-5xl font-semibold tracking-tight tabular sm:text-6xl">{fmtGpa(gpa.weighted)}</span>
-            {anyHypothetical && gpa.weighted !== null && realGpa.weighted !== null && (
-              <GpaDelta now={gpa.weighted} was={realGpa.weighted} />
+            <span className="text-6xl font-semibold tracking-tight tabular sm:text-7xl">{fmtGpa(cumulative.unweighted)}</span>
+            {anyHypothetical && cumulative.unweighted !== null && realCumulative.unweighted !== null && (
+              <GpaDelta now={cumulative.unweighted} was={realCumulative.unweighted} />
             )}
           </dd>
-        </div>
-        <div>
-          <dt className="text-sm opacity-70">Unweighted</dt>
-          <dd className="mt-1 flex items-baseline gap-2">
-            <span className="text-5xl font-semibold tracking-tight tabular sm:text-6xl">{fmtGpa(gpa.unweighted)}</span>
-            {anyHypothetical && gpa.unweighted !== null && realGpa.unweighted !== null && (
-              <GpaDelta now={gpa.unweighted} was={realGpa.unweighted} />
-            )}
-          </dd>
-        </div>
-      </dl>
-      {anyHypothetical && (
-        <p className="relative mt-3 text-xs opacity-70">
-          Real: {fmtGpa(realGpa.weighted)} weighted · {fmtGpa(realGpa.unweighted)} unweighted
-        </p>
+        </dl>
+      ) : (
+        <dl className="relative mt-4 grid grid-cols-2 gap-4">
+          <div>
+            <dt className="text-sm opacity-70">Weighted</dt>
+            <dd className="mt-1 flex items-baseline gap-2">
+              <span className="text-5xl font-semibold tracking-tight tabular sm:text-6xl">{fmtGpa(cumulative.weighted)}</span>
+              {anyHypothetical && cumulative.weighted !== null && realCumulative.weighted !== null && (
+                <GpaDelta now={cumulative.weighted} was={realCumulative.weighted} />
+              )}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-sm opacity-70">Unweighted</dt>
+            <dd className="mt-1 flex items-baseline gap-2">
+              <span className="text-5xl font-semibold tracking-tight tabular sm:text-6xl">{fmtGpa(cumulative.unweighted)}</span>
+              {anyHypothetical && cumulative.unweighted !== null && realCumulative.unweighted !== null && (
+                <GpaDelta now={cumulative.unweighted} was={realCumulative.unweighted} />
+              )}
+            </dd>
+          </div>
+        </dl>
       )}
+      <div className="relative mt-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-background/15 pt-3 text-xs">
+        <p className="opacity-80">
+          This term:{" "}
+          {gpa.weighted !== null && gpa.weighted !== gpa.unweighted ? (
+            <>
+              <span className="font-semibold tabular">{fmtGpa(gpa.weighted)}</span> weighted ·{" "}
+              <span className="font-semibold tabular">{fmtGpa(gpa.unweighted)}</span> unweighted
+            </>
+          ) : (
+            <>
+              <span className="font-semibold tabular">{fmtGpa(gpa.unweighted)}</span> unweighted
+            </>
+          )}
+          {anyHypothetical && ` (real ${fmtGpa(realGpa.unweighted)})`}
+        </p>
+        <Link
+          href="/gpa"
+          className="inline-flex min-h-11 items-center rounded-full bg-background/10 px-3 font-medium transition-colors hover:bg-background/20"
+        >
+          {cumulative.source === "transcript" ? "How it's calculated" : reading ? "GPA details" : "Add past years"}
+        </Link>
+      </div>
     </section>
   );
+}
+
+function fmtCredits(n: number) {
+  return Number.isInteger(n) ? String(n) : n.toFixed(1);
 }
 
 function GpaDelta({ now, was }: { now: number; was: number }) {
@@ -244,16 +289,16 @@ function ClassRow({ view, index }: { view: CourseView; index: number }) {
       <Link
         href={`/class/${courseSlug(course.id)}`}
         className="group flex h-full items-center gap-4 rounded-2xl border border-border bg-card p-4 transition-colors hover:border-gold-soft/70"
-        aria-label={`${course.title}, ${fmtPct(shown.percent)} ${shown.letter ?? ""}`}
+        aria-label={`${course.title}, ${shown.percent === null ? "no grade yet" : `${fmtPct(shown.percent)} ${shown.letter ?? ""}`}`}
       >
         <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-sm font-semibold tabular text-muted-foreground">
           {course.period}
         </span>
         <span className="min-w-0 flex-1">
-          <span className="flex items-center gap-2">
-            <span className="truncate font-medium">{course.title}</span>
+          <span className="flex items-start gap-2">
+            <span className="line-clamp-2 font-medium leading-snug">{course.title}</span>
             {course.level !== "regular" && (
-              <span className="shrink-0 rounded border border-border px-1 text-[0.65rem] font-semibold uppercase text-muted-foreground">
+              <span className="mt-0.5 shrink-0 rounded border border-border px-1 text-[0.65rem] font-semibold uppercase text-muted-foreground">
                 {course.level === "ap" ? "AP" : "H"}
               </span>
             )}
@@ -283,7 +328,9 @@ function ClassRow({ view, index }: { view: CourseView; index: number }) {
         </span>
         <span className="flex shrink-0 flex-col items-end gap-1">
           <span className="flex items-center gap-2">
-            <span className="text-lg font-semibold tabular">{fmtPct(shown.percent)}</span>
+            <span className={cn("text-lg font-semibold tabular", shown.percent === null && "text-muted-foreground")}>
+              {shown.percent === null ? "No grade" : fmtPct(shown.percent)}
+            </span>
             <LetterBadge letter={shown.letter} />
           </span>
           {hypoEnabled && hypo && (

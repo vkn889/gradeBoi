@@ -3,16 +3,20 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import type { ApiError, Gradebook } from "@/lib/types";
-import { prefsStore, scenarioStore, seenStore } from "@/lib/client/stores";
+import { historyStore, prefsStore, scenarioStore, seenStore } from "@/lib/client/stores";
 import {
   DEFAULT_SCENARIO_NAME,
   buildCourseView,
+  cumulativeGpaFor,
   gpaFor,
   gradedIds,
   scenarioKey,
   type CourseView,
 } from "@/lib/client/course-view";
 import type { GpaResult } from "@/lib/grades/gpa";
+import type { TranscriptResponse } from "@/lib/transcript/types";
+import type { CumulativeResult, TranscriptGpa } from "@/lib/client/course-view";
+import { detectExams } from "@/lib/ap/detect";
 import { emptyScenario, isEmptyScenario, type Scenario } from "@/lib/grades/hypothetical";
 import type { CourseScenarios } from "@/lib/client/storage";
 
@@ -30,12 +34,25 @@ type GradebookContextValue = {
   refreshing: boolean;
   load: (period?: number) => Promise<void>;
   views: CourseView[];
+  /** this grading period only */
   gpa: GpaResult;
   realGpa: GpaResult;
+  /** all of high school: past years + this grading period */
+  cumulative: CumulativeResult;
+  realCumulative: CumulativeResult;
+  /** unofficial transcript read from StudentVUE documents (null while loading) */
+  transcript: TranscriptState;
+  reloadTranscript: () => Promise<void>;
+  /** number of past-year grades entered */
+  historyCount: number;
+  /** AP exam ids detected from the transcript and this term's classes */
+  detectedApExams: string[];
   anyHypothetical: boolean;
   markSeen: (courseId: string) => void;
   logout: () => Promise<void>;
 };
+
+export type TranscriptState = { status: "LOADING" } | { status: "ERROR"; message: string } | TranscriptResponse;
 
 const GradebookContext = React.createContext<GradebookContextValue | null>(null);
 
@@ -69,6 +86,9 @@ export function GradebookProvider({
   const prefs = prefsStore.useValue();
   const scenarios = scenarioStore.useValue();
   const seen = seenStore.useValue();
+  const history = historyStore.useValue();
+  const [transcript, setTranscript] = React.useState<TranscriptState>({ status: "LOADING" });
+  const transcriptRequested = React.useRef(false);
 
   const load = React.useCallback(
     async (reportPeriod?: number) => {
@@ -140,6 +160,43 @@ export function GradebookProvider({
     };
   }, [load]);
 
+  const reloadTranscript = React.useCallback(async () => {
+    setTranscript({ status: "LOADING" });
+    try {
+      const res = await fetch("/api/transcript", { cache: "no-store" });
+      const body = (await res.json().catch(() => null)) as TranscriptResponse | { error: { message: string } } | null;
+      if (res.status === 401) {
+        router.replace("/?expired=1");
+        return;
+      }
+      if (!res.ok || !body || "error" in body) {
+        setTranscript({ status: "ERROR", message: body && "error" in body ? body.error.message : "Couldn't read your transcript." });
+        return;
+      }
+      setTranscript(body);
+    } catch {
+      setTranscript({ status: "ERROR", message: "Couldn't reach GradeBoi to read your transcript." });
+    }
+  }, [router]);
+
+  // Read the transcript once, after grades are on screen, so it never delays the dashboard.
+  React.useEffect(() => {
+    if (status !== "ready" || transcriptRequested.current) return;
+    transcriptRequested.current = true;
+    queueMicrotask(() => void reloadTranscript());
+  }, [status, reloadTranscript]);
+
+  const transcriptGpa = React.useMemo<TranscriptGpa | null>(() => {
+    if (transcript.status !== "FOUND") return null;
+    const t = transcript.transcript;
+    return {
+      unweighted: t.gpa.unweighted,
+      weighted: t.gpa.weighted,
+      credits: t.gpa.credits,
+      courses: t.courses.map((c) => ({ letter: c.letter, level: c.level, credits: c.credits })),
+    };
+  }, [transcript]);
+
   const views = React.useMemo(() => {
     if (!gradebook || period === null) return [];
     return gradebook.courses.map((c) => buildCourseView(c, period, prefs, scenarios, seen));
@@ -147,7 +204,20 @@ export function GradebookProvider({
 
   const gpa = React.useMemo(() => gpaFor(views, prefs, "effective"), [views, prefs]);
   const realGpa = React.useMemo(() => gpaFor(views, prefs, "real"), [views, prefs]);
+  const cumulative = React.useMemo(
+    () => cumulativeGpaFor(views, history, prefs, "effective", transcriptGpa),
+    [views, history, prefs, transcriptGpa],
+  );
+  const realCumulative = React.useMemo(
+    () => cumulativeGpaFor(views, history, prefs, "real", transcriptGpa),
+    [views, history, prefs, transcriptGpa],
+  );
   const anyHypothetical = views.some((v) => v.hypoEnabled && !isEmptyScenario(v.scenario));
+  const detectedApExams = React.useMemo(() => {
+    const fromTranscript = transcript.status === "FOUND" ? transcript.transcript.apExamIds : [];
+    const fromViews = detectExams(views.map((v) => v.course.title));
+    return Array.from(new Set([...fromTranscript, ...fromViews]));
+  }, [transcript, views]);
 
   const markSeen = React.useCallback(
     (courseId: string) => {
@@ -187,6 +257,12 @@ export function GradebookProvider({
     views,
     gpa,
     realGpa,
+    cumulative,
+    realCumulative,
+    historyCount: history.length,
+    detectedApExams,
+    transcript,
+    reloadTranscript,
     anyHypothetical,
     markSeen,
     logout,

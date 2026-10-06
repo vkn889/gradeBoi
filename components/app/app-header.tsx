@@ -1,6 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { FileText } from "lucide-react";
+import { LayoutDashboard } from "@/components/animate-ui/icons/layout-dashboard";
+import { Gauge } from "@/components/animate-ui/icons/gauge";
+import { Sparkles } from "@/components/animate-ui/icons/sparkles";
+import { cn } from "@/lib/utils";
 import { useGradebook } from "@/components/providers/gradebook-provider";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { LogoMark } from "@/components/brand/logo";
@@ -85,6 +91,44 @@ export function AppHeader() {
           </Tooltip>
         </div>
       </div>
+      <MainNav />
     </header>
+  );
+}
+
+const NAV = [
+  { href: "/dashboard", label: "Grades", match: (p: string) => p === "/dashboard" || p.startsWith("/class/"), Icon: LayoutDashboard },
+  { href: "/gpa", label: "GPA", match: (p: string) => p === "/gpa", Icon: Gauge },
+  { href: "/ap", label: "AP", match: (p: string) => p === "/ap", Icon: Sparkles },
+  { href: "/documents", label: "Documents", match: (p: string) => p === "/documents", Icon: null },
+] as const;
+
+function MainNav() {
+  const pathname = usePathname() ?? "";
+  return (
+    <nav aria-label="Main" className="mx-auto w-full max-w-5xl px-4 pb-2 sm:px-6">
+      <ul className="flex gap-1 rounded-xl bg-muted p-1 sm:w-fit">
+        {NAV.map(({ href, label, match, Icon }) => {
+          const active = match(pathname);
+          return (
+            <li key={href} className="min-w-0 flex-1 sm:flex-none">
+              <AnimateIcon animateOnHover asChild>
+                <Link
+                  href={href}
+                  aria-current={active ? "page" : undefined}
+                  className={cn(
+                    "flex min-h-10 items-center justify-center gap-1.5 rounded-lg px-2 text-sm font-medium transition-colors sm:px-4",
+                    active ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {Icon ? <Icon size={15} className="shrink-0" aria-hidden /> : <FileText size={15} className="shrink-0" aria-hidden />}
+                  <span className="truncate">{label}</span>
+                </Link>
+              </AnimateIcon>
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
   );
 }
