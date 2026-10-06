@@ -25,29 +25,42 @@ export function detectLevel(title: string): CourseLevel {
   return "regular";
 }
 
-export type GpaInput = { letter: Letter | null; level: CourseLevel };
+export type GpaInput = {
+  letter: Letter | null;
+  level: CourseLevel;
+  /** credits the grade is worth (default 1); GPA is a credit-weighted average */
+  credits?: number;
+};
 
 export type GpaResult = {
   unweighted: number | null;
   weighted: number | null;
-  /** number of classes with a grade */
+  /** number of graded entries */
   count: number;
+  /** total credits counted */
+  credits: number;
 };
 
 /**
- * Unweighted GPA on a 4.0 scale. Weighted adds the level bonus to classes with a C or better.
- * Classes with no grade are excluded.
+ * Credit-weighted GPA on a 4.0 scale. Weighted adds the level bonus to grades of C or better.
+ * Entries with no grade (N/A) or zero credits are excluded.
  */
 export function computeGpa(courses: GpaInput[], bonus: GpaBonus = DEFAULT_BONUS): GpaResult {
-  const graded = courses.filter((c): c is { letter: Letter; level: CourseLevel } => c.letter !== null);
-  if (graded.length === 0) return { unweighted: null, weighted: null, count: 0 };
   let u = 0;
   let w = 0;
-  for (const c of graded) {
+  let credits = 0;
+  let count = 0;
+  for (const c of courses) {
+    if (c.letter === null || !(c.letter in GPA_POINTS)) continue;
+    const cr = c.credits ?? 1;
+    if (!(cr > 0)) continue;
     const pts = GPA_POINTS[c.letter];
-    u += pts;
     const extra = pts >= GPA_POINTS.C ? (c.level === "ap" ? bonus.ap : c.level === "honors" ? bonus.honors : 0) : 0;
-    w += pts + extra;
+    u += pts * cr;
+    w += (pts + extra) * cr;
+    credits += cr;
+    count += 1;
   }
-  return { unweighted: u / graded.length, weighted: w / graded.length, count: graded.length };
+  if (count === 0) return { unweighted: null, weighted: null, count: 0, credits: 0 };
+  return { unweighted: u / credits, weighted: w / credits, count, credits };
 }

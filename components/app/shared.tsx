@@ -25,12 +25,13 @@ export function LetterBadge({ letter, className, size = "md" }: { letter: Letter
         "inline-flex items-center justify-center rounded-lg font-semibold tabular tracking-tight",
         size === "sm" && "h-6 min-w-7 px-1.5 text-xs",
         size === "md" && "h-8 min-w-9 px-2 text-sm",
+        letter === null && "font-medium",
         size === "lg" && "h-11 min-w-12 px-2.5 text-lg",
         tone,
         className,
       )}
     >
-      {letter ?? "—"}
+      {letter ?? "N/A"}
     </span>
   );
 }
@@ -67,10 +68,18 @@ export function RealVsHypo({ real, hypo, delta }: { real: number | null; hypo: n
   );
 }
 
-export function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
+export function ErrorState({
+  message,
+  onRetry,
+  title = "Couldn't load your grades",
+}: {
+  message: string;
+  onRetry: () => void;
+  title?: string;
+}) {
   return (
     <div role="alert" className="mx-auto mt-16 max-w-md rounded-2xl border border-border bg-card p-6 text-center">
-      <p className="text-lg font-semibold">Couldn&apos;t load your grades</p>
+      <p className="text-lg font-semibold">{title}</p>
       <p className="mt-2 text-sm text-muted-foreground">{message}</p>
       <AnimateIcon animateOnHover asChild>
         <Button className="mt-5 h-11 px-5" onClick={onRetry}>

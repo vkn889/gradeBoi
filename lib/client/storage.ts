@@ -9,6 +9,8 @@ import type { Scenario } from "@/lib/grades/hypothetical";
 export const PREFS_KEY = "gb:prefs";
 export const SEEN_KEY = "gb:seen";
 export const SCENARIOS_KEY = "gb:scenarios";
+export const HISTORY_KEY = "gb:history";
+export const AP_KEY = "gb:ap";
 
 export type Prefs = {
   districtUrl: string;
@@ -24,6 +26,39 @@ export type Prefs = {
   gpaGoal: number | null;
   /** course id -> target letter (GPA planner) */
   targetLetters: Record<string, string>;
+  /** count this grading period's classes in the cumulative GPA */
+  includeCurrent: boolean;
+  /** credits each current class is worth in the cumulative GPA (one semester = 0.5) */
+  currentCredits: number;
+  /** "auto": past years come from the StudentVUE transcript; "manual": from classes typed in */
+  gpaSource: "auto" | "manual";
+};
+
+export type ApScoreValue = 1 | 2 | 3 | 4 | 5;
+
+/** AP exam scores and the college whose credit the student is checking (saved on the device). */
+export type ApState = {
+  /** exam id -> score the student got or expects */
+  scores: Record<string, ApScoreValue>;
+  /** AP exam ids added by hand, on top of those detected from the transcript/gradebook */
+  manualExams: string[];
+  /** selected college id for the credit estimate */
+  college: string | null;
+};
+
+export const DEFAULT_AP: ApState = { scores: {}, manualExams: [], college: null };
+
+export type GradeLevel = 9 | 10 | 11 | 12;
+
+/** A finished class from a past term, entered by the student (StudentVUE's API has no course history). */
+export type PastCourse = {
+  id: string;
+  gradeLevel: GradeLevel;
+  term: "S1" | "S2" | "Year";
+  name: string;
+  letter: import("@/lib/grades/scale").Letter;
+  level: CourseLevel;
+  credits: number;
 };
 
 /** Per course key ("<reportPeriod>|<courseId>"): hypothetical toggle plus named saved scenarios. */
@@ -76,6 +111,9 @@ export const DEFAULT_PREFS: Prefs = {
   levelOverrides: {},
   gpaGoal: null,
   targetLetters: {},
+  includeCurrent: true,
+  currentCredits: 0.5,
+  gpaSource: "auto",
 };
 
 /** Reads prefs, filling in defaults for missing or malformed fields. */

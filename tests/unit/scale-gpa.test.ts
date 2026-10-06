@@ -53,6 +53,18 @@ describe("isValidScale", () => {
 });
 
 describe("GPA", () => {
+  it("weights by credits and skips N/A and zero-credit entries", () => {
+    const r = computeGpa([
+      { letter: "A", level: "regular", credits: 1 },
+      { letter: "C", level: "regular", credits: 0.5 },
+      { letter: null, level: "regular", credits: 1 },
+      { letter: "F", level: "regular", credits: 0 },
+    ]);
+    expect(r.unweighted).toBeCloseTo((4 * 1 + 2 * 0.5) / 1.5);
+    expect(r.credits).toBeCloseTo(1.5);
+    expect(r.count).toBe(2);
+  });
+
   it("detects levels from titles", () => {
     expect(detectLevel("AP Calculus AB")).toBe("ap");
     expect(detectLevel("Advanced Placement Biology")).toBe("ap");
@@ -77,6 +89,6 @@ describe("GPA", () => {
     expect(computeGpa([{ letter: "C", level: "honors" }], { ap: 1, honors: 1 }).weighted).toBeCloseTo(3);
   });
   it("returns nulls with no graded classes", () => {
-    expect(computeGpa([])).toEqual({ unweighted: null, weighted: null, count: 0 });
+    expect(computeGpa([])).toEqual({ unweighted: null, weighted: null, count: 0, credits: 0 });
   });
 });
