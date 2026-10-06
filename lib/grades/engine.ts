@@ -120,10 +120,19 @@ export type DisplayPercent = {
   mismatch: boolean;
 };
 
+/**
+ * A class at exactly 0.0% means nothing has been entered in the gradebook yet, not an F.
+ * Such classes show "N/A" and are left out of every GPA.
+ */
+export function isNoGrade(percent: number | null): boolean {
+  return percent === null || Math.abs(percent) < 1e-9;
+}
+
 /** Real grade to display: computed, unless it disagrees with StudentVUE, then official wins. */
 export function displayPercent(course: Course): DisplayPercent {
-  const computed = computePercent(course);
-  const official = course.official.percent;
+  const rawComputed = computePercent(course);
+  const computed = isNoGrade(rawComputed) ? null : rawComputed;
+  const official = isNoGrade(course.official.percent) ? null : course.official.percent;
   if (official === null) return { percent: computed, computed, mismatch: false };
   if (computed === null) return { percent: official, computed, mismatch: false };
   const mismatch = Math.abs(computed - official) > ACCURACY_TOLERANCE;

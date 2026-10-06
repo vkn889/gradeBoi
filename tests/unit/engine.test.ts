@@ -9,6 +9,7 @@ import {
   displayPercent,
   finalExamNeeded,
   gradeHistory,
+  isNoGrade,
   pointValue,
   solveNeededScore,
 } from "@/lib/grades/engine";
@@ -125,15 +126,30 @@ describe("accuracy check: every fixture course matches its official percent with
     for (const course of parseGradebook(f.xml).courses) {
       it(`${f.name}: ${course.title}`, () => {
         const computed = computePercent(course);
-        if (course.official.percent === null) {
+        if (isNoGrade(course.official.percent)) {
+          // No official grade (or 0.0% = nothing entered yet): nothing should be computed either.
           expect(computed).toBeNull();
+          expect(displayPercent(course).percent).toBeNull();
         } else {
           expect(computed).not.toBeNull();
-          expect(Math.abs((computed as number) - course.official.percent)).toBeLessThanOrEqual(ACCURACY_TOLERANCE);
+          expect(Math.abs((computed as number) - (course.official.percent as number))).toBeLessThanOrEqual(ACCURACY_TOLERANCE);
         }
       });
     }
   }
+});
+
+describe("0.0% means no grade yet (N/A)", () => {
+  it("treats an official 0.0% as no grade", () => {
+    const empty = weighted([a("1", "Tests", null, 10)], [{ name: "Tests", weight: 100 }]);
+    expect(displayPercent({ ...empty, official: { percent: 0, letter: "F" } }).percent).toBeNull();
+  });
+  it("treats a computed 0.0% with no official grade as no grade", () => {
+    const zero = weighted([a("1", "Tests", 0, 10)], [{ name: "Tests", weight: 100 }]);
+    expect(displayPercent(zero).percent).toBeNull();
+    expect(isNoGrade(0)).toBe(true);
+    expect(isNoGrade(0.4)).toBe(false);
+  });
 });
 
 describe("solveNeededScore", () => {
