@@ -195,9 +195,13 @@ export function ClassView({ courseId }: { courseId: string }) {
         ) : (
           <div className="flex items-center justify-between gap-4">
             <div>
-              <p className="text-5xl font-semibold tracking-tight tabular">{fmtPct(real.percent)}</p>
+              <p className="text-5xl font-semibold tracking-tight tabular">{real.percent === null ? "N/A" : fmtPct(real.percent)}</p>
               <p className="mt-1 text-sm text-muted-foreground">
-                {course.weighted ? "Weighted by category" : "Total points"}
+                {real.percent === null
+                  ? "No grade entered yet. Not counted in your GPA."
+                  : course.weighted
+                    ? "Weighted by category"
+                    : "Total points"}
               </p>
             </div>
             <LetterBadge letter={real.letter} size="lg" />

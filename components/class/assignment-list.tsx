@@ -88,7 +88,17 @@ export function AssignmentList({ course, realCourse, hypothetical, removed, newI
               hypothetical={hypothetical}
               isNew={newIds.has(a.id)}
               expanded={expanded === a.id}
-              onToggle={() => setExpanded((cur) => (cur === a.id ? null : a.id))}
+              onToggle={() => {
+                const opening = expanded !== a.id;
+                setExpanded(opening ? a.id : null);
+                // Bring the whole expanded row (editor + management bar) on screen once it has opened.
+                if (opening) {
+                  window.setTimeout(
+                    () => document.getElementById(`asg-${a.id}`)?.scrollIntoView({ block: "nearest", behavior: "smooth" }),
+                    230,
+                  );
+                }
+              }}
               bar={
                 hypothetical ? (
                   <AssignmentBar
@@ -183,7 +193,7 @@ function AssignmentRow({
   return (
     <motion.li
       id={`asg-${a.id}`}
-      layout={!reduce}
+      layout={reduce ? false : "position"}
       initial={reduce ? false : { opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       exit={reduce ? { opacity: 0 } : { opacity: 0, x: -60, height: 0, marginTop: 0 }}

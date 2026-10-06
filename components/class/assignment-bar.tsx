@@ -120,7 +120,12 @@ export function AssignmentBar(props: AssignmentBarProps) {
           </div>
           <div className="mx-3 hidden h-6 w-px rounded-full bg-border @lg/wrapper:block" />
 
-          <motion.div layout layoutRoot className="mx-auto flex flex-wrap justify-center gap-2 sm:flex-nowrap">
+          <motion.div
+            layout
+            layoutRoot
+            transition={{ layout: { duration: 0.15, ease: "easeOut" } }}
+            className="mx-auto flex flex-wrap justify-center gap-2 sm:flex-nowrap"
+          >
             {actions.map((a) => (
               <AnimateIcon key={a.label} animateOnHover asChild>
                 <motion.button
@@ -162,7 +167,7 @@ export function AssignmentBar(props: AssignmentBarProps) {
               </motion.button>
             </DropdownMenuTrigger>
           </AnimateIcon>
-          <DropdownMenuContent align="end" className="min-w-52">
+          <DropdownMenuContent align="end" collisionPadding={12} className="max-h-[min(20rem,var(--radix-dropdown-menu-content-available-height))] min-w-52 overflow-y-auto">
             <DropdownMenuLabel>Category</DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuRadioGroup value={category} onValueChange={onMove}>
