@@ -1,0 +1,50 @@
+<Gradebook Type="Traditional" ErrorMessage="">
+  <ReportingPeriods>
+    <ReportPeriod Index="0" GradePeriod="Quarter 1" StartDate="9/3/2026" EndDate="11/7/2026" />
+    <ReportPeriod Index="1" GradePeriod="Quarter 2" StartDate="11/10/2026" EndDate="1/28/2027" />
+  </ReportingPeriods>
+  <ReportingPeriod GradePeriod="Quarter 1" StartDate="9/3/2026" EndDate="11/7/2026" />
+  <Courses>
+    <Course Period="1" Title="Biology &amp; Lab (SCI101)" Room="12" Staff="Doe, Jane" StaffEMail="jdoe@example.org">
+      <Marks>
+        <Mark MarkName="Q1" CalculatedScoreString="B+" CalculatedScoreRaw="87.0">
+          <GradeCalculationSummary>
+            <AssignmentGradeCalc Type="Tests" Weight="70%" Points="80.00" PointsPossible="100.00" WeightedPct="56%" CalculatedMark="B-" />
+            <AssignmentGradeCalc Type="Homework" Weight="30%" Points="31.00" PointsPossible="30.00" WeightedPct="31.0%" CalculatedMark="A" />
+            <AssignmentGradeCalc Type="Projects" Weight="0%" Points="0" PointsPossible="0" WeightedPct="0%" CalculatedMark="" />
+            <AssignmentGradeCalc Type="TOTAL" Weight="100%" Points="111" PointsPossible="133" WeightedPct="87.0%" CalculatedMark="B+" />
+          </GradeCalculationSummary>
+          <Assignments>
+            <Assignment GradebookID="9001" Measure="Cells Test" Type="Tests" Date="9/20/2026" DueDate="9/20/2026" Score="8 out of 10" Points="80.00 / 100.0000" Notes="" />
+            <Assignment GradebookID="9002" Measure="HW 1" Type="Homework" Date="9/10/2026" Score="9" Points="9.00 / 10.0000" Notes="" />
+            <Assignment GradebookID="9003" Measure="HW 2" Type="Homework" Date="9/12/2026" Score="" Points="10.0000 Points Possible" Notes="" />
+            <Assignment GradebookID="9004" Measure="HW 3" Type="Homework" Date="9/14/2026" Score="Not Graded" Points="" Notes="Missing" />
+            <Assignment GradebookID="9005" Measure="HW Bonus" Type="Homework" Date="9/15/2026" Score="" Points="2.00 / 0.0000" Notes="" />
+            <Assignment GradebookID="9006" Measure="Field trip form" Type="Homework" Date="9/16/2026" Score="Not for Grading" Points="" Notes="" />
+            <Assignment GradebookID="9007" Measure="HW 4" Type="Homework" Date="9/18/2026" Score="" Points="20.00 / 20.0000" Notes="Turned in late" />
+            <Assignment GradebookID="9008" Measure="Reading check" Type="Homework" Date="9/19/2026" Score="Excused" Points="5.0000 Points Possible" Notes="" />
+          </Assignments>
+        </Mark>
+      </Marks>
+    </Course>
+    <Course Period="2" Title="Advanced Placement Psychology" Room="" Staff="Roe, Rick" StaffEMail="">
+      <Marks>
+        <Mark MarkName="Q1" CalculatedScoreString="A" CalculatedScoreRaw="98.4">
+          <GradeCalculationSummary />
+          <Assignments>
+            <Assignment GradebookID="9101" Measure="Essay" Type="Writing" Date="9/9/2026" Score="85%" Points="" Notes="" />
+            <Assignment GradebookID="9102" Measure="Quiz" Type="Quizzes" Date="9/11/2026" Score="" Points="47.00 / 50.0000" Notes="" />
+            <Assignment GradebookID="9103" Measure="Project" Type="Projects" Date="9/30/2026" Score="" Points="1,000.00 / 1,000.0000" Notes="" />
+          </Assignments>
+        </Mark>
+      </Marks>
+    </Course>
+    <Course Period="3" Title="Study Hall" Room="Lib" Staff="Smith, Al" StaffEMail="">
+      <Marks>
+        <Mark MarkName="Q1" CalculatedScoreString="N/A" CalculatedScoreRaw="">
+          <Assignments />
+        </Mark>
+      </Marks>
+    </Course>
+  </Courses>
+</Gradebook>
