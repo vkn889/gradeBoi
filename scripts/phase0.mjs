@@ -103,6 +103,36 @@ async function tryJsonApi() {
     writeFileSync("tests/fixtures/real-gradebook.local.json", JSON.stringify(t, null, 2));
     console.log("  saved: tests/fixtures/real-gradebook.local.json (anonymize before committing)");
   }
+
+  // Documents + transcript (used for the automatic cumulative GPA).
+  const bearer = `Bearer ${login.body.access_token}`;
+  const docs = await json("GetStudentDocuments", bearer, { childIntID: 0, languageCode: "en" });
+  if (docs.body?.error) {
+    console.log(`  documents:         error ${docs.body.error.code} ${docs.body.error.message}`);
+    return true;
+  }
+  const list = docs.body?.data?.studentDocuments?.studentDocumentDatas ?? [];
+  const types = [...new Set(list.map((d) => d.documentType))];
+  console.log(`  documents:         ${list.length} (${types.join(", ") || "none"})`);
+  const transcripts = list.filter((d) => /transcript/i.test(`${d.documentType} ${d.documentComment}`));
+  if (!transcripts.length) {
+    console.log("  transcript:        none posted (cumulative GPA will use manual entry)");
+    return true;
+  }
+  const pick = transcripts.find((d) => /unofficial/i.test(`${d.documentType} ${d.documentComment}`)) ?? transcripts[0];
+  const content = await json("GetStudentDocumentContent", bearer, { childIntID: 0, documentGU: pick.documentGU });
+  const rows = content.body?.data?.studentAttachedDocumentData?.documentDatas ?? [];
+  const b64 = rows[0]?.base64Code;
+  if (!b64) {
+    console.log(`  transcript:        download failed (keys: ${Object.keys(content.body?.data ?? {}).join(", ")}; ${content.body?.error?.message ?? ""})`);
+    return true;
+  }
+  const pdf = Buffer.from(b64, "base64");
+  console.log(`  transcript:        "${pick.documentComment || pick.documentType}" downloaded (${pdf.length} bytes, ${pdf.subarray(0, 5).toString() === "%PDF-" ? "PDF" : "NOT a PDF"})`);
+  if (process.env.SAVE === "1") {
+    writeFileSync("tests/fixtures/real-transcript.local.pdf", pdf);
+    console.log("  saved: tests/fixtures/real-transcript.local.pdf (contains your grades; never commit it)");
+  }
   return true;
 }
 
