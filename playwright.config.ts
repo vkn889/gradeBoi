@@ -4,8 +4,12 @@ const PORT = Number(process.env.E2E_PORT ?? 3100);
 
 export default defineConfig({
   testDir: "tests/e2e",
-  timeout: 30_000,
+  timeout: 60_000,
+  expect: { timeout: 10_000 },
   fullyParallel: true,
+  // Each worker drives a full browser against one production server; more than a few
+  // oversubscribes a laptop and turns slow page loads into false failures.
+  workers: process.env.CI ? 2 : 3,
   retries: process.env.CI ? 1 : 0,
   use: {
     baseURL: `http://localhost:${PORT}`,
