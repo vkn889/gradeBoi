@@ -1,5 +1,6 @@
-import type { Gradebook } from "@/lib/types";
+import type { DocumentFile, Gradebook, StudentDocument } from "@/lib/types";
 import { StudentVueError, isCredentialError, parseJsonGradebook } from "./parse";
+import { parseDocumentContent, parseDocumentList } from "./documents";
 import { UpstreamError, upstreamFetch } from "./soap";
 
 // Client for the JSON API used by the "StudentVUE (New)" app (Synergy 2027+):
@@ -211,4 +212,42 @@ export async function fetchStudentName(districtUrl: string, tokens: JsonTokens, 
   } catch {
     return null;
   }
+}
+
+function throwForError(error: { code: string; message: string }): never {
+  if (error.code === "401" || isCredentialError(error.message)) {
+    throw new StudentVueError("BAD_CREDENTIALS", "Session expired.");
+  }
+  throw new StudentVueError("UPSTREAM_ERROR", error.message || "StudentVUE returned an error.");
+}
+
+export async function fetchDocumentList(
+  districtUrl: string,
+  tokens: JsonTokens,
+  fetchImpl?: FetchLike,
+): Promise<{ documents: StudentDocument[]; tokens: JsonTokens }> {
+  const res = await callWithRefresh(districtUrl, "GetStudentDocuments", { childIntID: 0, languageCode: "en" }, tokens, fetchImpl);
+  if (res.error) {
+    // 2100 = documents not enabled at this school: nothing to show, not a failure.
+    if (res.error.code === FEATURE_NOT_ENABLED) return { documents: [], tokens: res.tokens };
+    throwForError(res.error);
+  }
+  return { documents: parseDocumentList(res.data), tokens: res.tokens };
+}
+
+export async function fetchDocument(
+  districtUrl: string,
+  tokens: JsonTokens,
+  documentId: string,
+  fetchImpl?: FetchLike,
+): Promise<{ file: DocumentFile; tokens: JsonTokens }> {
+  const res = await callWithRefresh(
+    districtUrl,
+    "GetStudentDocumentContent",
+    { childIntID: 0, documentGU: documentId },
+    tokens,
+    fetchImpl,
+  );
+  if (res.error) throwForError(res.error);
+  return { file: parseDocumentContent(res.data, documentId), tokens: res.tokens };
 }

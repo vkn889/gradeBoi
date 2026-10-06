@@ -12,6 +12,8 @@ export type SessionData = {
   studentName?: string;
   /** demo account: no StudentVUE credentials, data comes from the demo generator */
   demo?: boolean;
+  /** random per-sign-in id, used to rate-limit demo sessions individually */
+  sid?: string;
 };
 
 export const SESSION_COOKIE = "gb_session";

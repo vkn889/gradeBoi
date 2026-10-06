@@ -62,3 +62,21 @@ export type Assignment = {
 };
 
 export type ApiError = { error: { code: string; message: string } };
+
+/** A document published to the student in StudentVUE (transcript, report card, letters, ...). */
+export type StudentDocument = {
+  id: string;
+  /** display name (StudentVUE's comment, else its type) */
+  name: string;
+  type: string;
+  /** ISO date, or the raw string when unparseable */
+  date: string;
+  fileName?: string;
+  isTranscript: boolean;
+};
+
+export type DocumentFile = {
+  fileName: string;
+  contentType: string;
+  data: Uint8Array;
+};

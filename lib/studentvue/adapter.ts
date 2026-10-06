@@ -1,8 +1,8 @@
-import type { Gradebook } from "@/lib/types";
+import type { DocumentFile, Gradebook, StudentDocument } from "@/lib/types";
 import { StudentVueError, parseGradebook, parseStudentName } from "./parse";
 import { UpstreamError, soapCall } from "./soap";
 import { gradebookEndpoint } from "./district";
-import { attemptLogin, fetchGradebook, fetchStudentName } from "./json-api";
+import { attemptLogin, fetchDocument, fetchDocumentList, fetchGradebook, fetchStudentName, type JsonTokens } from "./json-api";
 
 /**
  * Every data source (JSON API, legacy SOAP, web portal, Chrome extension) implements this
@@ -27,7 +27,13 @@ export interface GradebookAdapter {
   login(creds: Credentials): Promise<{ studentName: string | null; auth: AdapterAuth }>;
   /** Fetches and parses a gradebook; omit reportPeriod for the current one. Returns refreshed auth if it changed. */
   getGradebook(account: Account, reportPeriod?: number): Promise<{ gradebook: Gradebook; auth?: AdapterAuth }>;
+  /** Documents published in StudentVUE (transcripts, report cards, letters). */
+  listDocuments(account: Account): Promise<{ documents: StudentDocument[]; auth?: AdapterAuth }>;
+  getDocument(account: Account, documentId: string): Promise<{ file: DocumentFile; auth?: AdapterAuth }>;
 }
+
+const notSupported = () =>
+  new StudentVueError("NOT_SUPPORTED", "Documents aren't available for your district's StudentVUE version yet.");
 
 type FetchLike = typeof fetch;
 
@@ -56,6 +62,28 @@ export class JsonApiAdapter implements GradebookAdapter {
     const res = await fetchGradebook(account.districtUrl, { accessToken, refreshToken }, reportPeriod, this.fetchImpl);
     const changed = res.tokens.accessToken !== accessToken || res.tokens.refreshToken !== refreshToken;
     return { gradebook: res.gradebook, auth: changed ? { kind: "json" as const, ...res.tokens } : undefined };
+  }
+
+  private tokens(account: Account): JsonTokens {
+    if (account.auth.kind !== "json") throw new StudentVueError("BAD_CREDENTIALS", "Session expired.");
+    return { accessToken: account.auth.accessToken, refreshToken: account.auth.refreshToken };
+  }
+
+  private rotated(before: JsonTokens, after: JsonTokens): AdapterAuth | undefined {
+    const changed = before.accessToken !== after.accessToken || before.refreshToken !== after.refreshToken;
+    return changed ? { kind: "json", ...after } : undefined;
+  }
+
+  async listDocuments(account: Account) {
+    const t = this.tokens(account);
+    const res = await fetchDocumentList(account.districtUrl, t, this.fetchImpl);
+    return { documents: res.documents, auth: this.rotated(t, res.tokens) };
+  }
+
+  async getDocument(account: Account, documentId: string) {
+    const t = this.tokens(account);
+    const res = await fetchDocument(account.districtUrl, t, documentId, this.fetchImpl);
+    return { file: res.file, auth: this.rotated(t, res.tokens) };
   }
 }
 
@@ -95,6 +123,15 @@ export class SoapAdapter implements GradebookAdapter {
     );
     return { gradebook: parseGradebook(inner) };
   }
+
+  // Legacy SOAP districts: StudentVUE's newer document calls aren't available.
+  async listDocuments(): Promise<{ documents: StudentDocument[] }> {
+    throw notSupported();
+  }
+
+  async getDocument(): Promise<{ file: DocumentFile }> {
+    throw notSupported();
+  }
 }
 
 /** True when the district doesn't have the JSON API at all (older Synergy): fall back to SOAP. */
@@ -125,9 +162,19 @@ export class AutoAdapter implements GradebookAdapter {
     }
   }
 
+  private pick(account: Account): GradebookAdapter {
+    return account.auth.kind === "soap" ? this.soap : this.json;
+  }
+
   getGradebook(account: Account, reportPeriod?: number) {
-    return account.auth.kind === "soap"
-      ? this.soap.getGradebook(account, reportPeriod)
-      : this.json.getGradebook(account, reportPeriod);
+    return this.pick(account).getGradebook(account, reportPeriod);
+  }
+
+  listDocuments(account: Account) {
+    return this.pick(account).listDocuments(account);
+  }
+
+  getDocument(account: Account, documentId: string) {
+    return this.pick(account).getDocument(account, documentId);
   }
 }

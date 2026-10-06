@@ -1,7 +1,7 @@
-import { createHash } from "node:crypto";
 import { adapterFor } from "@/lib/server/adapters";
 import { json, jsonError, readJson, upstreamErrorResponse } from "@/lib/server/http";
-import { clientIp, gradebookLimiter } from "@/lib/server/rate-limit";
+import { gradebookLimiter } from "@/lib/server/rate-limit";
+import { accountFrom, sessionRateKey } from "@/lib/server/account";
 import { getRouteSession, isLoggedIn } from "@/lib/server/session";
 import { StudentVueError } from "@/lib/studentvue/parse";
 
@@ -15,10 +15,7 @@ export async function POST(request: Request) {
     return jsonError(401, "SESSION_EXPIRED", "Your session expired. Sign in again.", headers);
   }
 
-  const key = session.demo
-    ? `demo:${clientIp(request)}`
-    : createHash("sha256").update(`${session.districtUrl}\n${session.username}`).digest("hex");
-  const limit = gradebookLimiter.hit(key);
+  const limit = gradebookLimiter.hit(sessionRateKey(session, request));
   if (!limit.ok) {
     headers.set("Retry-After", String(limit.retryAfter));
     return jsonError(429, "RATE_LIMITED", "You're refreshing too fast. Wait a few minutes.", headers);
@@ -33,7 +30,7 @@ export async function POST(request: Request) {
 
   try {
     const result = await adapterFor(session).getGradebook(
-      { districtUrl: session.districtUrl ?? "", username: session.username ?? "", auth: session.auth ?? { kind: "demo" } },
+      accountFrom(session),
       typeof rp === "number" ? rp : undefined,
     );
     if (result.auth) {

@@ -25,6 +25,8 @@ type DemoCourse = {
   room: string;
   /** category -> weight %, omit for points-based classes */
   weights?: Record<string, number>;
+  /** StudentVUE reports 0.0% for classes with nothing entered yet */
+  reportsZeroWhenEmpty?: boolean;
   assignments: DemoAssignment[];
 };
 
@@ -128,6 +130,17 @@ const COURSES: DemoCourse[] = [
     ],
   },
   {
+    period: 7,
+    title: "Health",
+    staff: "Lopez, Maria",
+    email: "mlopez@demo.k12.example",
+    room: "112",
+    reportsZeroWhenEmpty: true,
+    assignments: [
+      { name: "Wellness Plan", type: "Projects", day: 8, rawPoints: "50.0000 Points Possible", rawScore: "Not Graded" },
+    ],
+  },
+  {
     period: 6,
     title: "Physical Education",
     staff: "Brooks, Tanya",
@@ -218,8 +231,9 @@ export const DEMO_CURRENT_PERIOD = 1;
 function courseXml(c: DemoCourse, today: Date, period: DemoPeriod): string {
   const included = c.assignments.filter((a) => a.day >= period.startOffset && a.day <= period.endOffset);
   const pct = officialPercent(c, included);
-  const raw = pct === null ? "" : pct.toFixed(1);
-  const markLetter = pct === null ? "N/A" : letter(Math.round(pct * 10) / 10);
+  const zero = pct === null && c.reportsZeroWhenEmpty;
+  const raw = pct === null ? (zero ? "0.0" : "") : pct.toFixed(1);
+  const markLetter = pct === null ? (zero ? "F" : "N/A") : letter(Math.round(pct * 10) / 10);
 
   let calc = "";
   if (c.weights) {
@@ -275,7 +289,7 @@ export function demoGradebookXml(reportPeriod?: number, today: Date = new Date()
     `<Gradebook xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" Type="Traditional" ErrorMessage="" HideStandardGraphInd="false" HideMarksColumnElementary="false" HidePointsColumnElementary="false" HidePercentSecondary="false" DisplayStandardsData="false" GBStandardsTabDefault="false">` +
     `<ReportingPeriods>${periods}</ReportingPeriods>` +
     `<ReportingPeriod GradePeriod="${attr(period.name)}" StartDate="${fmtDate(addDays(base, period.startOffset))}" EndDate="${fmtDate(addDays(base, period.endOffset))}" />` +
-    `<Courses>${COURSES.map((c) => courseXml(c, base, period)).join("")}</Courses></Gradebook>`
+    `<Courses>${[...COURSES].sort((a, b) => a.period - b.period).map((c) => courseXml(c, base, period)).join("")}</Courses></Gradebook>`
   );
 }
 

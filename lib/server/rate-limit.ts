@@ -42,6 +42,8 @@ export const loginLimiter = new RateLimiter(10, FIFTEEN_MIN);
 export const demoLoginLimiter = new RateLimiter(100, FIFTEEN_MIN);
 /** 30 gradebook calls per session per 15 minutes. */
 export const gradebookLimiter = new RateLimiter(30, FIFTEEN_MIN);
+/** Document list + downloads per session. */
+export const documentsLimiter = new RateLimiter(60, FIFTEEN_MIN);
 /** District lookups per IP. */
 export const districtLimiter = new RateLimiter(30, FIFTEEN_MIN);
 

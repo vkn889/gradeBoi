@@ -18,7 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { prefsStore, scenarioStore, seenStore, updatePrefs } from "@/lib/client/stores";
+import { apStore, historyStore, prefsStore, scenarioStore, seenStore, updatePrefs } from "@/lib/client/stores";
 import { DEFAULT_SCALE, LETTERS, isValidScale, type GradeScale } from "@/lib/grades/scale";
 import { DEFAULT_BONUS } from "@/lib/grades/gpa";
 
@@ -52,6 +52,8 @@ export function SettingsDialog({ triggerClassName }: { triggerClassName?: string
   function clearData() {
     scenarioStore.set({});
     seenStore.set({});
+    historyStore.set([]);
+    apStore.set({ scores: {}, manualExams: [], college: null });
     prefsStore.set((p) => ({
       ...p,
       scale: DEFAULT_SCALE,
@@ -60,9 +62,11 @@ export function SettingsDialog({ triggerClassName }: { triggerClassName?: string
       levelOverrides: {},
       gpaGoal: null,
       targetLetters: {},
+      includeCurrent: true,
+      currentCredits: 0.5,
     }));
     setScale(Object.fromEntries(LETTERS.map((l) => [l, String(DEFAULT_SCALE[l])])));
-    toast.success("Saved scenarios and settings cleared from this device.");
+    toast.success("Scenarios, past-year grades, and settings cleared from this device.");
   }
 
   return (

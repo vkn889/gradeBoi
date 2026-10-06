@@ -23,6 +23,7 @@ export async function POST(request: Request) {
     const demo = await adapterFor({ demo: true }).login({ districtUrl: "", username: "", password: "" });
     const session = await getRouteSession(request, headers);
     session.demo = true;
+    session.sid = crypto.randomUUID();
     session.studentName = demo.studentName ?? "Demo student";
     session.auth = demo.auth;
     delete session.username;
