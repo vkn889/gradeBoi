@@ -2,9 +2,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { POST as login } from "@/app/api/login/route";
 import { POST as gradebook } from "@/app/api/gradebook/route";
 import { POST as logout } from "@/app/api/logout/route";
+import { GET as listDocs } from "@/app/api/documents/route";
+import { GET as getDoc } from "@/app/api/documents/[id]/route";
+import { GET as getTranscript } from "@/app/api/transcript/route";
+import { demoTranscriptGpa } from "@/lib/demo/documents";
+import { demoDocumentContentData, demoDocumentListData } from "@/lib/demo/documents";
 import { GET as districts } from "@/app/api/districts/route";
 import { demoGradebookXml, wrapSoapEnvelope } from "@/lib/demo/generate";
-import { demoLoginLimiter, gradebookLimiter, loginLimiter, districtLimiter } from "@/lib/server/rate-limit";
+import { demoLoginLimiter, documentsLimiter, gradebookLimiter, loginLimiter, districtLimiter } from "@/lib/server/rate-limit";
 import { clearDistrictCache } from "@/lib/studentvue/districts";
 import { xmlToJsonGradebook } from "../helpers/json-gradebook";
 
@@ -20,7 +25,8 @@ type Mode =
   | "noJsonApi" // older district: JSON API 404s, SOAP works
   | "soapDeprecated" // Synergy 2027: SOAP returns D5518
   | "expireOnce" // first Gradebook call 401s; client must refresh
-  | "noGradebook"; // error 2100
+  | "noGradebook" // error 2100
+  | "noTranscript"; // documents exist, none is a transcript
 let mode: Mode = "ok";
 let calls: { url: string; body: string; headers: Record<string, string> }[] = [];
 let tokenGen = 1;
@@ -87,6 +93,21 @@ function mockServer(url: string, init: RequestInit): Promise<Response> {
     if (jsonMethod === "GetChildListData") {
       return Promise.resolve(jsonRes({ error: null, data: { children: { childInfos: [{ childIntID: 0, name: "Jamie Lee" }] } } }));
     }
+    if (jsonMethod === "GetStudentDocuments") {
+      const data = demoDocumentListData();
+      if (mode === "noTranscript") {
+        data.studentDocuments.studentDocumentDatas = data.studentDocuments.studentDocumentDatas.filter(
+          (d) => d.documentType !== "Transcript",
+        );
+      }
+      return Promise.resolve(jsonRes({ error: null, data }));
+    }
+    if (jsonMethod === "GetStudentDocumentContent") {
+      const data = demoDocumentContentData(request.documentGU);
+      return Promise.resolve(
+        data ? jsonRes({ error: null, data }) : jsonRes({ error: { code: "500", message: "Document not found" }, data: null }),
+      );
+    }
     if (jsonMethod === "Gradebook") {
       if (mode === "noGradebook") {
         return Promise.resolve(jsonRes({ error: { code: "2100", message: "Grade Book data not available for this school" }, data: null }));
@@ -149,6 +170,7 @@ beforeEach(() => {
   expiredServed = false;
   loginLimiter.reset();
   demoLoginLimiter.reset();
+  documentsLimiter.reset();
   gradebookLimiter.reset();
   districtLimiter.reset();
   clearDistrictCache();
@@ -409,5 +431,119 @@ describe("GET /api/districts", () => {
   it("returns 502 when the lookup fails", async () => {
     mode = "malformed";
     expect((await get("?zip=98012")).status).toBe(502);
+  });
+});
+
+describe("documents", () => {
+  const TRANSCRIPT = "6F1D2C1A-0D5E-4C1B-9A55-7F0D8E3A1B01";
+  const get = (path: string, cookie?: string) =>
+    new Request(`http://localhost${path}`, { headers: { "x-forwarded-for": "1.2.3.4", ...(cookie ? { cookie } : {}) } });
+  const ctx = (id: string) => ({ params: Promise.resolve({ id }) });
+
+  it("requires a session", async () => {
+    expect((await listDocs(get("/api/documents"))).status).toBe(401);
+    expect((await getDoc(get(`/api/documents/${TRANSCRIPT}`), ctx(TRANSCRIPT))).status).toBe(401);
+  });
+
+  it("lists documents from the JSON API with transcripts first", async () => {
+    const cookie = cookieFrom(await login(req("/api/login", goodLogin)));
+    calls = [];
+    const res = await listDocs(get("/api/documents", cookie));
+    expect(res.status).toBe(200);
+    const { documents } = await res.json();
+    expect(documents[0]).toMatchObject({ id: TRANSCRIPT, isTranscript: true, type: "Transcript" });
+    expect(calls[0].url).toMatch(/PXPWebServices\/GetStudentDocuments$/);
+    expect(JSON.parse(JSON.parse(calls[0].body).arguments.request)).toEqual({ childIntID: 0, languageCode: "en" });
+  });
+
+  it("streams a PDF inline, or as a download, never cached", async () => {
+    const cookie = cookieFrom(await login(req("/api/login", goodLogin)));
+    const res = await getDoc(get(`/api/documents/${TRANSCRIPT}`, cookie), ctx(TRANSCRIPT));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("application/pdf");
+    expect(res.headers.get("content-disposition")).toMatch(/^inline; filename="Transcript.pdf"/);
+    expect(res.headers.get("cache-control")).toBe("private, no-store");
+    expect(Buffer.from(await res.arrayBuffer()).subarray(0, 5).toString()).toBe("%PDF-");
+    const dl = await getDoc(get(`/api/documents/${TRANSCRIPT}?download=1`, cookie), ctx(TRANSCRIPT));
+    expect(dl.headers.get("content-disposition")).toMatch(/^attachment;/);
+  });
+
+  it("rejects bad ids before calling StudentVUE and maps upstream errors", async () => {
+    const cookie = cookieFrom(await login(req("/api/login", goodLogin)));
+    calls = [];
+    expect((await getDoc(get("/api/documents/x", cookie), ctx("../../etc"))).status).toBe(400);
+    expect(calls).toHaveLength(0);
+    expect((await getDoc(get("/api/documents/NOPE-1", cookie), ctx("NOPE-1"))).status).toBe(502);
+  });
+
+  it("works for the demo account with no network", async () => {
+    const cookie = cookieFrom(await login(req("/api/login", { demo: true })));
+    calls = [];
+    const res = await listDocs(get("/api/documents", cookie));
+    expect((await res.json()).documents).toHaveLength(4);
+    expect((await getDoc(get(`/api/documents/${TRANSCRIPT}`, cookie), ctx(TRANSCRIPT))).status).toBe(200);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("explains that legacy SOAP districts don't have documents", async () => {
+    mode = "noJsonApi";
+    const cookie = cookieFrom(await login(req("/api/login", goodLogin)));
+    const res = await listDocs(get("/api/documents", cookie));
+    expect(res.status).toBe(502);
+    expect((await res.json()).error.code).toBe("NOT_SUPPORTED");
+  });
+});
+
+describe("GET /api/transcript", () => {
+  const get = (cookie?: string) =>
+    new Request("http://localhost/api/transcript", { headers: { "x-forwarded-for": "1.2.3.4", ...(cookie ? { cookie } : {}) } });
+
+  it("requires a session", async () => {
+    expect((await getTranscript(get())).status).toBe(401);
+  });
+
+  it("finds the unofficial transcript in StudentVUE documents and reads its GPA", async () => {
+    const cookie = cookieFrom(await login(req("/api/login", goodLogin)));
+    calls = [];
+    const res = await getTranscript(get(cookie));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    const expected = demoTranscriptGpa();
+    expect(body.status).toBe("FOUND");
+    expect(body.transcript.gpa).toEqual({ unweighted: expected.unweighted, weighted: expected.weighted, credits: expected.credits });
+    expect(body.transcript.coursesVerified).toBe(true);
+    expect(body.transcript.document.name).toBe("Unofficial Transcript");
+    expect(calls.map((c) => c.url.split("/").pop())).toEqual(["GetStudentDocuments", "GetStudentDocumentContent"]);
+  });
+
+  it("reports when no transcript is posted", async () => {
+    const cookie = cookieFrom(await login(req("/api/login", goodLogin)));
+    mode = "noTranscript";
+    expect(await (await getTranscript(get(cookie))).json()).toEqual({ status: "NOT_POSTED", transcript: null });
+  });
+
+  it("works for the demo account and reports legacy districts as unsupported", async () => {
+    const demo = cookieFrom(await login(req("/api/login", { demo: true })));
+    expect((await (await getTranscript(get(demo))).json()).status).toBe("FOUND");
+    mode = "noJsonApi";
+    const soap = cookieFrom(await login(req("/api/login", goodLogin)));
+    expect(await (await getTranscript(get(soap))).json()).toEqual({ status: "NOT_SUPPORTED", transcript: null });
+  });
+
+  it("returns 502 when StudentVUE fails", async () => {
+    const cookie = cookieFrom(await login(req("/api/login", goodLogin)));
+    mode = "http500";
+    expect((await getTranscript(get(cookie))).status).toBe(502);
+  });
+});
+
+describe("demo rate limits", () => {
+  it("are per demo session, not per IP", async () => {
+    const a = cookieFrom(await login(req("/api/login", { demo: true })));
+    const b = cookieFrom(await login(req("/api/login", { demo: true })));
+    for (let i = 0; i < 30; i++) expect((await gradebook(req("/api/gradebook", {}, a))).status).toBe(200);
+    expect((await gradebook(req("/api/gradebook", {}, a))).status).toBe(429);
+    // Another demo user on the same IP still has their own budget.
+    expect((await gradebook(req("/api/gradebook", {}, b))).status).toBe(200);
   });
 });

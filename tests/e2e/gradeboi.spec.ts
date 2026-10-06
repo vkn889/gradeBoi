@@ -4,7 +4,7 @@ async function openDemo(page: Page) {
   await page.goto("/");
   await page.getByRole("button", { name: /explore with demo grades/i }).click();
   await page.waitForURL("**/dashboard");
-  await expect(page.getByText(/grade point average/i)).toBeVisible();
+  await expect(page.getByText("Cumulative GPA")).toBeVisible();
 }
 
 test("login page shows privacy notice and validates input", async ({ page }) => {
@@ -139,4 +139,88 @@ test("sign out clears the session", async ({ page }) => {
   await page.waitForURL((u) => u.pathname === "/");
   await page.goto("/dashboard");
   await expect(page).toHaveURL(/\/$/);
+});
+
+test("a class at 0.0% shows N/A and doesn't count toward GPA", async ({ page }) => {
+  await openDemo(page);
+  const health = page.getByRole("link", { name: /Health, no grade yet/ });
+  await expect(health).toContainText("N/A");
+  await expect(health).not.toContainText(/\bF\b/);
+  await health.click();
+  await expect(page.getByText(/No grade entered yet\. Not counted in your GPA\./)).toBeVisible();
+});
+
+test("cumulative GPA is read from the StudentVUE transcript automatically", async ({ page }) => {
+  await openDemo(page);
+  const card = page.getByRole("region", { name: "GPA" });
+  // No typing: the transcript in StudentVUE documents is found and read on its own.
+  await expect(card).toContainText(/Unofficial transcript \(.+\) \+ this term/);
+  const termOnly = await page.getByText(/^This term:/).textContent();
+  expect(termOnly).toContain("3.40");
+
+  await page.getByRole("link", { name: "GPA", exact: true }).click();
+  const panel = page.getByRole("region", { name: "Transcript" });
+  await expect(panel).toContainText("Unofficial Transcript");
+  await expect(panel).toContainText("3.76"); // printed unweighted 3.756
+  await expect(panel).toContainText("3.94"); // printed weighted 3.944
+  await panel.getByText(/16 classes read from the transcript/).click();
+  await expect(panel).toContainText("AP Human Geography");
+
+  // (3.756 x 8 + this term 3.40 x 3) / 11 credits
+  const stats = page.getByRole("region", { name: "Cumulative GPA" });
+  await expect(stats).toContainText("3.66");
+
+  // Switching to manual entry uses typed-in classes instead.
+  await page.getByRole("switch", { name: /use my transcript/i }).click();
+  await page.getByRole("textbox", { name: "Class" }).fill("English 9");
+  await page.getByRole("combobox", { name: "Letter" }).click();
+  await page.getByRole("option", { name: "C", exact: true }).click();
+  await page.getByRole("button", { name: /add class/i }).click();
+  await expect(page.getByRole("region", { name: "Grade 9" })).toContainText("English 9");
+  await page.getByRole("link", { name: "Grades", exact: true }).click();
+  await expect(card).toContainText("Past years you entered + this term");
+});
+
+test("documents: transcript first, opens as a PDF", async ({ page }) => {
+  await openDemo(page);
+  await page.getByRole("link", { name: "Documents", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Documents", exact: true })).toBeVisible();
+  const transcript = page.getByRole("region", { name: "Transcript" });
+  await expect(transcript).toContainText("Unofficial Transcript");
+  await expect(page.getByText("All documents (4)")).toBeVisible();
+
+  const href = await transcript.getByRole("link", { name: /View Unofficial Transcript/ }).getAttribute("href");
+  const res = await page.request.get(href!);
+  expect(res.status()).toBe(200);
+  expect(res.headers()["content-type"]).toBe("application/pdf");
+  expect((await res.body()).subarray(0, 5).toString()).toBe("%PDF-");
+
+  await page.getByRole("button", { name: "Report Card", exact: true }).click();
+  await expect(page.getByText(/Report Card - Semester 2/)).toBeVisible();
+});
+
+test("AP tools: estimate a score, set it, and see college credit", async ({ page }) => {
+  await openDemo(page);
+  await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "AP" }).click();
+  await expect(page.getByRole("heading", { name: /AP scores/ })).toBeVisible();
+
+  // Score estimator (defaults to Calculus AB): a strong paper estimates a 5.
+  await page.getByLabel("Multiple-choice correct").fill("42");
+  await page.getByLabel("Free-response points").fill("50");
+  const calc = page.getByRole("region", { name: "AP score estimator" });
+  await expect(calc).toContainText("5");
+
+  // Calculus AB is auto-detected from the demo schedule; give it a 5.
+  const mine = page.getByRole("region", { name: "My AP exams" });
+  await expect(mine).toContainText("Calculus AB");
+  await mine.getByRole("combobox", { name: /Score for Calculus AB/ }).click();
+  await page.getByRole("option", { name: "5", exact: true }).click();
+
+  // Pick UW -> estimated quarter credits appear.
+  const credit = page.getByRole("region", { name: "College AP credit" });
+  await credit.getByRole("combobox", { name: "College" }).click();
+  await page.getByRole("option", { name: /University of Washington \(Seattle\)/ }).click();
+  await expect(credit).toContainText(/Estimated credit at/);
+  await expect(credit).toContainText(/quarter credits/);
+  await expect(credit.getByRole("link", { name: /official AP policy/ })).toBeVisible();
 });
